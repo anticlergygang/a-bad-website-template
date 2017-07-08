@@ -17,4 +17,10 @@ step 6) Configure establishConnectionPromise parameter domainName in ~/websitero
 
 step 7) Configure establishConnectionPromise parameter domainName in ~/websiteroot/database/js/main.js
 
+step 8) node servers.js
+
+step 9) ????
+
+step 10) Welcome to hell.
+
 Questions? go to https://discord.gg/8SrxDyF with them.
