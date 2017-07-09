@@ -34,7 +34,7 @@ const establishStoragePromise = (timeout) => {
 };
 document.addEventListener('DOMContentLoaded', () => {
     let socket = undefined;
-    establishConnectionPromise('', 10000)
+    establishConnectionPromise('passthepotion.com', 10000)
         .then((newSocket) => {
             socket = newSocket;
             return establishStoragePromise(3000);

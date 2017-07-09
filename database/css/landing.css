@@ -6,8 +6,17 @@
 input {
     text-align: center;
     width: 100vw;
-    font-size: 5vh;
+    font-size: 5vw;
     padding-bottom: .5vh;
+}
+
+#brand {
+    text-align: center;
+    background-color: gray;
+    color: lightgreen;
+    font-size: 10vw;
+    margin-top: 2vh;
+    margin-bottom: 2vh;
 }
 
 #registerSubmit {

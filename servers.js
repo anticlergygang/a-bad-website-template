@@ -5,8 +5,8 @@ const http = require('http');
 const mime = require('mime-types');
 const https = require('https');
 const hashFunc = require('argon2');
-const domainName = '';
-const serverIP = '';
+const domainName = 'passthepotion.com';
+const serverIP = 'passthepotion.com';
 let db = {};
 db.files = {
     'landing.html': fs.readFileSync('database/html/landing.html'),
