@@ -1,5 +1,5 @@
 const mime = require('mime-types');
-const domainName = 'YOURDOMAINNAMEHERE';
+const domainName = 'sethacked.com';
 const wss = require('ws');
 const fs = require('fs');
 const http = require('http');
