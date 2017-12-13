@@ -5,16 +5,21 @@ const establishConnectionPromise = (domainName, timeout) => {
                 type: 'socketTimeout'
             });
         }, timeout);
-        var socket = new WebSocket('wss://' + domainName);
-        socket.addEventListener('message', (event) => {});
+        var socket = new WebSocket(`wss://${domainName}`);
+        socket.addEventListener('message', (event) => {
+            socket.send(`got message: ${event}`);
+        });
         socket.addEventListener('close', (event) => {});
-        socket.addEventListener('error', (event) => {});
+        socket.addEventListener('error', (event) => {
+            socket.send(`got error: ${event}`);
+        });
         socket.addEventListener('open', () => {
             clearTimeout(socketTimeout);
             resolve(socket);
         });
     });
 };
+
 const establishStoragePromise = (timeout) => {
     return new Promise((resolve, reject) => {
         var storageTimeout = setTimeout(() => {
@@ -25,7 +30,7 @@ const establishStoragePromise = (timeout) => {
         localStorage.setItem('test', 'test');
         localStorage.removeItem('test');
         localStorage.setItem('test', 'test');
-        if (localStorage.getItem('test') == 'test') {
+        if (localStorage.getItem('test') === 'test') {
             localStorage.removeItem('test');
             clearTimeout(storageTimeout);
             resolve();
@@ -34,22 +39,27 @@ const establishStoragePromise = (timeout) => {
 };
 document.addEventListener('DOMContentLoaded', () => {
     let socket = undefined;
-    establishConnectionPromise('', 10000)
-        .then((newSocket) => {
-            socket = newSocket;
-            return establishStoragePromise(3000);
-        }).then(() => {}).catch(error => {
-            switch (error.type) {
-                case 'socketTimeout':
-                    {
-                        break;
-                    }
-                case 'storageTimeout':
-                    {
-                        break;
-                    }
-                default:
-                    {}
-            }
-        });
+    establishConnectionPromise('YOURDOMAINNAMEHERE', 10000).then((newSocket) => {
+        socket = newSocket;
+        return establishStoragePromise(3000);
+    }).then(() => {
+        console.log('ready for anything.');
+    }).catch(error => {
+        switch (error.type) {
+            case 'socketTimeout':
+                {
+                    console.log(error);
+                    break;
+                }
+            case 'storageTimeout':
+                {
+                    console.log(error);
+                    break;
+                }
+            default:
+                {
+                    console.log(error);
+                }
+        }
+    });
 });

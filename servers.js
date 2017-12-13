@@ -1,92 +1,41 @@
-const fs = require('fs');
-const url = require('url');
-const wss = require('ws');
-const http = require('http');
 const mime = require('mime-types');
-const https = require('https');
-const hashFunc = require('argon2');
-const domainName = '';
-const serverIP = '';
-let db = {};
-db.files = {
-    'landing.html': fs.readFileSync('database/html/landing.html'),
-    'landing.js': fs.readFileSync('database/js/landing.js'),
-    'landing.css': fs.readFileSync('database/css/landing.css'),
+const domainName = 'YOURDOMAINNAMEHERE';
+const wss = require('wss');
+let database = {};
+database.files = {
     'main.html': fs.readFileSync('database/html/main.html'),
     'main.js': fs.readFileSync('database/js/main.js'),
     'main.css': fs.readFileSync('database/css/main.css')
 };
-db.users = JSON.parse(fs.readFileSync('database/users/main.json'));
-const hashSessionPromise = (sessionFor) => {
-    return new Promise((resolve, reject) => {
-        var hashTimeout = setTimeout(() => {
-            reject('hashTimeout');
-        }, 10000);
-        hashFunc.hash(sessionFor, {
-            timeCost: 3,
-            memoryCost: 12,
-            parallelism: 4,
-            raw: true
-        }).then(hash => {
-            clearTimeout(hashTimeout);
-            resolve(hash.toString('base64'));
-        });
-    });
-};
-const hashPasswordPromise = (password) => {
-    return new Promise((resolve, reject) => {
-        var hashTimeout = setTimeout(() => {
-            reject('hashTimeout');
-        }, 10000);
-        hashFunc.hash(password, {
-            timeCost: 3,
-            memoryCost: 12,
-            parallelism: 4
-        }).then(hash => {
-            clearTimeout(hashTimeout);
-            resolve(hash);
-        });
-    });
-};
-const checkPasswordHashPromise = (password, hash) => {
-    return new Promise((resolve, reject) => {
-        hashFunc.verify(hash, password).then(match => {
-            if (match) {
-                resolve('match');
-            } else {
-                reject('no match');
-            }
-        }).catch(err => {
-            reject(err);
-        });
-    });
-};
+database.wssMessages = fs.readFileSync('database/wssMessages/main.json');
+database.backup.wssMessages = database.wssMessages;
+
 let httpsServer = https.createServer({
-    key: fs.readFileSync('/etc/letsencrypt/live/' + domainName + '/privkey.pem'),
-    cert: fs.readFileSync('/etc/letsencrypt/live/' + domainName + '/fullchain.pem')
+    key: fs.readFileSync(`/etc/letsencrypt/live/${domainName}/privkey.pem`),
+    cert: fs.readFileSync(`/etc/letsencrypt/live/${domainName}/fullchain.pem`)
 }, (req, res) => {
-    console.log(req.url);
-    var accessableFiles = Object.keys(db.files);
-    var fileIndex = accessableFiles.indexOf(req.url.replace('/', ''));
-    if (fileIndex != -1) {
-        var reqFile = accessableFiles[fileIndex];
+    let accessableFiles = Object.keys(database.files);
+    let fileIndex = accessableFiles.indexOf(req.url.replace('/', ''));
+    if (fileIndex !== -1) {
+        let reqFile = accessableFiles[fileIndex];
         res.setHeader('content-type', mime.lookup(reqFile));
-        res.end(db.files[reqFile]);
+        res.end(database.files[reqFile]);
     } else {
-        if (req.url == '/') {
+        if (req.url === '/' || req.url === '/index' || req.url === '/index.html' || req.url === '/main' || req.url === '/main.html') {
             res.setHeader('Content-Type', 'text/html');
-            res.end(db.files['landing.html']);
+            res.end(database.files['main.html']);
         } else {
-            res.end();
+            res.writeHead(404);
+            res.end('What chu lookin for?');
         }
     }
-}).listen(443, serverIP);
+}).listen(443, domainName);
 let httpServer = http.createServer((req, res) => {
     res.writeHead(302, {
         'Location': 'https://' + domainName
     });
     res.end('Upgrade your browser to allow for HTTPS(secure) traffic.');
-}).listen(80, serverIP);
+}).listen(80, domainName);
 let wssServer = new wss.Server({
     server: httpsServer,
     verifyClient: (info) => {
@@ -98,84 +47,51 @@ let wssServer = new wss.Server({
     }
 });
 wssServer.on('connection', (clientSocket, req) => {
+    let timestamp = new Date().getTime();
+    let messageIndex = Object.keys(database.wssMessages).length;
+    let from = req.connection.remoteAddress;
+    clientSocket.send('Welcome.');
+    database.wssMessages[messageIndex] = {
+        from: from,
+        message: 'JOIN',
+        timestamp: timestamp
+    };
+    database.backup.wssMessages[messageIndex] = {
+        from: from,
+        message: 'JOIN',
+        timestamp: timestamp
+    };
     clientSocket.on('message', (message) => {
-        try {
-            var fromServer = JSON.parse(message);
-            console.log(fromServer);
-            switch (fromServer.type) {
-                case 'register':
-                    {
-                        var a9 = fromServer.registerUsername.match(/[a-zA-Z0-9]{3,20}$/);
-                        var pw = fromServer.registerPassword.match(/.{10,125}$/);
-                        if (a9 != null && a9.index == 0 && Object.keys(db.users).indexOf(fromServer.registerUsername) == -1 && pw != null && pw.index == 0 && fromServer.registerPassword == fromServer.registerRepassword) {
-                            hashPasswordPromise(fromServer.registerPassword).then(hash => {
-                                db.users[fromServer.registerUsername] = {
-                                    'hash': hash,
-                                    'joined': Date.now(),
-                                    'uses': 0,
-                                    'ip': req.connection.remoteAddress
-                                };
-                                return hashSessionPromise(hash);
-                            }).then(hash => {
-                                db.users[fromServer.registerUsername].session = hash;
-                                clientSocket.send(JSON.stringify({ 'type': 'registerSuccess' }));
-                                clientSocket.send(JSON.stringify({ 'type': 'sessionUpdate', 'session': hash }));
-                                db.users[fromServer.registerUsername].lastActive = Date.now();
-                                db.users[fromServer.registerUsername].uses = db.users[fromServer.registerUsername].uses + 1;
-                                console.log(db.users);
-                            }).catch((error) => {
-                                clientSocket.send(JSON.stringify({ 'type': 'registerFail' }));
-                                console.log(error);
-                            });
-                        } else {
-                            clientSocket.send(JSON.stringify({ 'type': 'registerFail' }));
-                        }
-                        break;
-                    }
-                case 'login':
-                    {
-                        var a9 = fromServer.loginUsername.match(/[a-zA-Z0-9]{3,20}$/);
-                        var pw = fromServer.loginPassword.match(/.{10,125}$/);
-                        if (a9 != null && a9.index == 0 && pw != null && pw.index == 0 && Object.keys(db.users).indexOf(fromServer.loginUsername) != -1) {
-                            checkPasswordHashPromise(fromServer.loginPassword, db.users[fromServer.loginUsername].hash).then(matchStatus => {
-                                return hashSessionPromise(db.users[fromServer.loginUsername].hash);
-                            }).then(hash => {
-                                db.users[fromServer.loginUsername].session = hash;
-                                clientSocket.send(JSON.stringify({ 'type': 'loginSuccess' }));
-                                clientSocket.send(JSON.stringify({ 'type': 'sessionUpdate', 'session': hash }));
-                                db.users[fromServer.loginUsername].lastActive = Date.now();
-                                db.users[fromServer.loginUsername].uses = db.users[fromServer.loginUsername].uses + 1;
-                                console.log(db.users);
-                            }).catch((error) => {
-                                clientSocket.send(JSON.stringify({ 'type': 'loginFail' }));
-                                console.log(error);
-                            });
-                        } else {
-                            clientSocket.send(JSON.stringify({ 'type': 'loginFail' }));
-                        }
-                        break;
-                    }
-                default:
-                    {
-                        console.log('weird message: ${message}');
-                    }
-            }
-        } catch (error) {
-            console.log('weird message: ${message}');
-        }
+        database.wssMessages[messageIndex] = {
+            from: from,
+            message: message,
+            timestamp: timestamp
+        };
+        database.backup.wssMessages[messageIndex] = {
+            from: from,
+            message: message,
+            timestamp: timestamp
+        };
     });
-    clientSocket.on('close', () => {});
+    clientSocket.on('close', () => {
+        database.wssMessages[messageIndex] = {
+            from: from,
+            message: 'PART',
+            timestamp: timestamp
+        };
+        database.backup.wssMessages[messageIndex] = {
+            from: from,
+            message: 'PART',
+            timestamp: timestamp
+        };
+    });
 });
 process.stdin.resume();
-
 let exitHandler = (options, err) => {
-    if (options.backup) fs.writeFileSync('database/users/main.json', JSON.stringify(db.users));
+    if (options.backup) fs.writeFileSync(`database/backup/main-${new Date().getTime()}.json`, JSON.stringify(database.backup));
     if (err) console.log(err.stack);
     if (options.exit) process.exit();
 }
-
 process.on('exit', exitHandler.bind(null, { backup: true }));
-
 process.on('SIGINT', exitHandler.bind(null, { exit: true }));
-
 process.on('uncaughtException', exitHandler.bind(null, { exit: true }));
