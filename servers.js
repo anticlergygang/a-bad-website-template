@@ -1,6 +1,9 @@
 const mime = require('mime-types');
 const domainName = 'YOURDOMAINNAMEHERE';
-const wss = require('wss');
+const wss = require('ws');
+const fs = require('fs');
+const http = require('http');
+const https = require('https');
 let database = {};
 database.files = {
     'main.html': fs.readFileSync('database/html/main.html'),
@@ -8,6 +11,7 @@ database.files = {
     'main.css': fs.readFileSync('database/css/main.css')
 };
 database.wssMessages = fs.readFileSync('database/wssMessages/main.json');
+database.backup = {};
 database.backup.wssMessages = database.wssMessages;
 
 let httpsServer = https.createServer({
@@ -47,10 +51,10 @@ let wssServer = new wss.Server({
     }
 });
 wssServer.on('connection', (clientSocket, req) => {
+    clientSocket.send('Welcome.');
     let timestamp = new Date().getTime();
     let messageIndex = Object.keys(database.wssMessages).length;
     let from = req.connection.remoteAddress;
-    clientSocket.send('Welcome.');
     database.wssMessages[messageIndex] = {
         from: from,
         message: 'JOIN',
